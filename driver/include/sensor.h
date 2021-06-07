@@ -30,6 +30,7 @@ typedef enum {
     NT99141_PID = 0x14,
     GC2145_PID = 0x2145,
     GC032A_PID = 0x232a,
+    GC0308_PID = 0x9b,
 } camera_pid_t;
 
 typedef enum {
@@ -41,6 +42,7 @@ typedef enum {
     CAMERA_NT99141,
     CAMERA_GC2145,
     CAMERA_GC032A,
+    CAMERA_GC0308,
     CAMERA_MODEL_MAX,
     CAMERA_NONE,
 } camera_model_t;
@@ -54,6 +56,7 @@ typedef enum {
     NT99141_SCCB_ADDR  = 0x54 >> 1,
     GC2145_SCCB_ADDR   = 0x78 >> 1,
     GC032A_SCCB_ADDR   = 0x42 >> 1,
+    GC0308_SCCB_ADDR   = 0x42 >> 1,
 } camera_sccb_addr_t;
 
 typedef enum {
