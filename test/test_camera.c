@@ -9,7 +9,8 @@
 
 #include "esp_camera.h"
 
-#define BOARD_WROVER_KIT 1
+#define BOARD_WROVER_KIT 0
+#define BOARD_CAMERA_MODEL_ESP32_S3_EYE 1
 
 // WROVER-KIT PIN Map
 #if BOARD_WROVER_KIT
@@ -74,6 +75,28 @@
 #define Y4_GPIO_NUM       14
 #define Y3_GPIO_NUM       37
 #define Y2_GPIO_NUM       13
+
+#elif BOARD_CAMERA_MODEL_ESP32_S3_EYE
+
+#define PWDN_GPIO_NUM     -1
+#define RESET_GPIO_NUM    -1
+
+#define VSYNC_GPIO_NUM    6
+#define HREF_GPIO_NUM     7
+#define PCLK_GPIO_NUM     13
+#define XCLK_GPIO_NUM     15
+
+#define SIOD_GPIO_NUM     4
+#define SIOC_GPIO_NUM     5
+
+#define Y9_GPIO_NUM       16
+#define Y8_GPIO_NUM       17
+#define Y7_GPIO_NUM       18
+#define Y6_GPIO_NUM       12
+#define Y5_GPIO_NUM       11
+#define Y4_GPIO_NUM       10
+#define Y3_GPIO_NUM       9
+#define Y2_GPIO_NUM       8
 
 #endif
 
@@ -179,6 +202,31 @@ static camera_sensor_info_t *get_camera_info_from_pid(uint16_t pid)
     return NULL;
 }
 
+static void printf_img_base64(const camera_fb_t *pic)
+{
+    uint8_t *outbuffer = NULL;
+    size_t outsize = 0;
+    if (PIXFORMAT_JPEG != pic->format) {
+        fmt2jpg(pic->buf, pic->width * pic->height * 2, pic->width, pic->height, pic->format, 50, &outbuffer, &outsize);
+    } else {
+        outbuffer = pic->buf;
+        outsize = pic->len;
+    }
+
+    uint8_t *base64_buf = calloc(1, outsize * 4);
+    if (NULL != base64_buf) {
+        size_t out_len = 0;
+        mbedtls_base64_encode(base64_buf, outsize * 4, &out_len, outbuffer, outsize);
+        printf("%s\n", base64_buf);
+        free(base64_buf);
+        if (PIXFORMAT_JPEG != pic->format) {
+            free(outbuffer);
+        }
+    } else {
+        ESP_LOGE(TAG, "malloc for base64 buffer failed");
+    }
+}
+
 static void camera_performance_test(uint32_t xclk_freq, uint32_t pic_num)
 {
     esp_err_t ret = ESP_OK;
@@ -240,7 +288,7 @@ TEST_CASE("Camera driver init, deinit test", "[camera]")
     TEST_ESP_OK(esp_camera_deinit());
 }
 
-TEST_CASE("Camera driver take picture test", "[camera]")
+TEST_CASE("Camera driver take RGB565 picture test", "[camera]")
 {
     TEST_ESP_OK(init_camera(20000000, PIXFORMAT_RGB565, FRAMESIZE_QVGA, 2));
 
@@ -248,21 +296,23 @@ TEST_CASE("Camera driver take picture test", "[camera]")
     camera_fb_t *pic = esp_camera_fb_get();
     if (pic) {
         ESP_LOGI(TAG, "picture: %d x %d, size: %u", pic->width, pic->height, pic->len);
+        printf_img_base64(pic);
+        esp_camera_fb_return(pic);
+    }
 
-        uint8_t *outbuffer = NULL;
-        size_t outsize = 0;
-        fmt2jpg(pic->buf, pic->width * pic->height * 2, pic->width, pic->height, pic->format, 50, &outbuffer, &outsize);
+    TEST_ESP_OK(esp_camera_deinit());
+    TEST_ASSERT_NOT_NULL(pic);
+}
 
-        uint8_t *base64_buf = calloc(1, outsize * 4);
-        if (NULL != base64_buf) {
-            size_t out_len = 0;
-            mbedtls_base64_encode(base64_buf, outsize * 4, &out_len, outbuffer, outsize);
-            printf("%s\n", base64_buf);
-            free(base64_buf);
-            free(outbuffer);
-        } else {
-            ESP_LOGE(TAG, "malloc for base64 buffer failed");
-        }
+TEST_CASE("Camera driver take JPEG picture test", "[camera]")
+{
+    TEST_ESP_OK(init_camera(20000000, PIXFORMAT_JPEG, FRAMESIZE_QVGA, 2));
+
+    ESP_LOGI(TAG, "Taking picture...");
+    camera_fb_t *pic = esp_camera_fb_get();
+    if (pic) {
+        ESP_LOGI(TAG, "picture: %d x %d, size: %u", pic->width, pic->height, pic->len);
+        printf_img_base64(pic);
         esp_camera_fb_return(pic);
     }
 
