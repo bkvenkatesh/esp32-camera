@@ -16,6 +16,9 @@
 static const char *TAG = "gc0308";
 #endif
 
+#define H8(v) ((v)>>8)
+#define L8(v) ((v)&0xff)
+
 //#define REG_DEBUG_ON
 
 static int read_reg(uint8_t slv_addr, const uint16_t reg)
@@ -86,6 +89,25 @@ static int write_regs(uint8_t slv_addr, const uint16_t (*regs)[2])
     return ret;
 }
 
+static void print_regs(uint8_t slv_addr)
+{
+    ESP_LOGI(TAG, "REG list look ======================");
+    for (size_t i = 0xf0; i <= 0xfe; i++) {
+        ESP_LOGI(TAG, "reg[0x%02x] = 0x%02x", i, read_reg(slv_addr, i));
+    }
+    ESP_LOGI(TAG, "\npage 0 ===");
+    write_reg(slv_addr, 0xfe, 0x00); // page 0
+    for (size_t i = 0x03; i <= 0xa2; i++) {
+        ESP_LOGI(TAG, "p0 reg[0x%02x] = 0x%02x", i, read_reg(slv_addr, i));
+    }
+
+    ESP_LOGI(TAG, "\npage 3 ===");
+    write_reg(slv_addr, 0xfe, 0x03); // page 3
+    for (size_t i = 0x01; i <= 0x43; i++) {
+        ESP_LOGI(TAG, "p3 reg[0x%02x] = 0x%02x", i, read_reg(slv_addr, i));
+    }
+}
+
 static int reset(sensor_t *sensor)
 {
     int ret = 0;
@@ -96,7 +118,7 @@ static int reset(sensor_t *sensor)
         return ret;
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
-    ret = write_regs(sensor->slv_addr, GC0308_DEFAULT_CONFIG);
+    ret = write_regs(sensor->slv_addr, gc0308_sensor_default_regs);
     if (ret == 0) {
         ESP_LOGD(TAG, "Camera defaults loaded");
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -131,6 +153,36 @@ static int set_pixformat(sensor_t *sensor, pixformat_t pixformat)
         ESP_LOGD(TAG, "Set pixformat to: %u", pixformat);
     }
     return ret;
+}
+
+static int set_framesize(sensor_t *sensor, framesize_t framesize)
+{
+    int ret = 0;
+    if (framesize > FRAMESIZE_VGA) {
+        ESP_LOGW(TAG, "Invalid framesize: %u", framesize);
+        framesize = FRAMESIZE_VGA;
+    }
+    sensor->status.framesize = framesize;
+    uint16_t w = resolution[framesize].width;
+    uint16_t h = resolution[framesize].height;
+
+    uint16_t row_s = (resolution[FRAMESIZE_VGA].height - h) / 2;
+    uint16_t col_s = (resolution[FRAMESIZE_VGA].width - w) / 2;
+
+    SCCB_Write(sensor->slv_addr, 0xfe, 0x00);
+
+    SCCB_Write(sensor->slv_addr, 0x46, 0x80|(H8(row_s)<<4)|(H8(col_s)<<0));  // [7]enable crop, [6]NA, [5:4]crop win y0[9:8], [2:0]crop win x0[10:8]
+    SCCB_Write(sensor->slv_addr, 0x47, L8(row_s));  // crop_win_y0[7:0]
+    SCCB_Write(sensor->slv_addr, 0x48, L8(col_s));  // crop_win_x0[7:0]
+    SCCB_Write(sensor->slv_addr, 0x49, H8(h));  // [0]crop_win_height[8]
+    SCCB_Write(sensor->slv_addr, 0x4a, L8(h));  // crop_win_height[7:0]
+    SCCB_Write(sensor->slv_addr, 0x4b, H8(w));  // [0]crop_win_width[8]
+    SCCB_Write(sensor->slv_addr, 0x4c, L8(w));  // crop_win_width[7:0]
+
+    if (ret == 0) {
+        ESP_LOGD(TAG, "Set framesize to: %ux%u", w, h);
+    }
+    return 0;
 }
 
 static int set_contrast(sensor_t *sensor, uint8_t contrast)
@@ -175,12 +227,6 @@ static void set_AEC_target_Y(sensor_t *sensor, uint8_t AEC_target_Y)
 {
     SCCB_Write(sensor->slv_addr, 0xfe, 0x00);
     SCCB_Write(sensor->slv_addr, 0xd3, AEC_target_Y);
-}
-
-static int set_framesize(sensor_t *sensor, framesize_t framesize)
-{
-    SCCB_Write(sensor->slv_addr, 0xfe, 0x00);
-    return 0;
 }
 
 static int set_hmirror(sensor_t *sensor, int enable)
@@ -282,6 +328,8 @@ static int init_status(sensor_t *sensor)
     sensor->status.agc_gain = 0;
     sensor->status.aec_value = 0;
     sensor->status.aec2 = 0;
+
+    print_regs(sensor->slv_addr);
     return 0;
 }
 
