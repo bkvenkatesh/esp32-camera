@@ -266,7 +266,7 @@ esp_err_t esp_camera_init(const camera_config_t *config)
 
     s_state->sensor.status.framesize = frame_size;
     s_state->sensor.pixformat = pix_format;
-    // ESP_LOGD(TAG, "Setting frame size to %dx%d", s_state->width, s_state->height);
+    ESP_LOGI(TAG, "Setting frame size to 0x%d", s_state->sensor.status.framesize);
     if (s_state->sensor.set_framesize(&s_state->sensor, frame_size) != 0) {
         ESP_LOGE(TAG, "Failed to set frame size");
         err = ESP_ERR_CAMERA_FAILED_TO_SET_FRAME_SIZE;
